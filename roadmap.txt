@@ -1,0 +1,35 @@
+- read patterns from disk, file, url
+- enter patterns by hand
+- model/view/controller: multiple views: web, terminal, iPhone
+  - option to have de-synchronized views: if one can display faster, let it
+    run on ahead
+  - You can already have multiple web browsers pointed at the server and get
+    the running universe.
+  - Problems:
+    - Each universe image is rendered separately
+    - there's no communication between the two views: if view 1 stops, view 2
+      keeps going.
+    - each "next gen" request from each viewer causes a generation, instead of
+      both just getting the current generation.
+  - Resolution
+    - client tells server delay, start, stop
+    - server tells other clients to start, stop, and what delay to use
+    - server delays internally
+    - server has a list of individual "users" (universes?) & views of each
+      universe
+    - short term:
+      - use /life/1/index.html, life/2/index.html, etc for different universes
+    - long term:
+      - have a top page that says
+     - start a new universe
+     - list universes (clickable)
+     - view universe
+- save patterns
+- select subpatterns; drag and drop
+- drag and drop while continuing animation
+- detect periodic patterns at fringes and delete them.  E.g. If there's a
+  glider at the edge, and it's far enough away from everything else that they
+  could never catch it (I think all of 2 cells might do it), delete it.
+- reset to start pattern
+- allow multiple users
+

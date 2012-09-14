@@ -1,10 +1,17 @@
 package main
 
+// vim:sw=3:ts=3:fdm=indent
+
 import (
-	"math"
 	"fmt"
-	"time"
+	"image"
+	"image/color"
+	"image/png"
+	"math"
+	"net/http"
 	"runtime"
+	"sync"
+	// "time"
 )
 
 // data structures
@@ -13,52 +20,107 @@ type cell struct {
 }
 
 type universe struct {
-	cells map[cell]bool
+	cells                  map[cell]byte
 	minx, miny, maxx, maxy int
 }
-var u *universe
 
-// processing
-// several channels to process cells (# CPUs - 1?)
-// one channel read by goroutine to build next generation
+var delay float32 = 800.0
+var stop int = 0
+
+var u *universe
+var uCh chan *universe
+var numCPU int = runtime.NumCPU()
+var eventCh chan string = make(chan string)
 
 func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
+	runtime.GOMAXPROCS(numCPU)
 	u = make_universe()
-	for {
-		display(u)
-		u = next_gen()
+	uCh = make(chan *universe, 10)
+	go func() {
+		for {
+			uCh <- u
+			u = next_gen()
+		}
+	}()
+
+	http.HandleFunc("/life.html", LifeServer)
+	http.HandleFunc("/life.png", LifeImage)
+	http.HandleFunc("/button", Button)
+	http.HandleFunc("/updates", Updates)
+	println("serving")
+	err := http.ListenAndServe(":6080", nil)
+	if err != nil {
+		panic(err)
 	}
 }
 
+var gen int = 0
+
+func LifeImage(w http.ResponseWriter, req *http.Request) {
+	fmt.Printf("gen: %d\r", gen)
+	gen++
+	png.Encode(w, display(<-uCh))
+}
+
+func Button(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		w.Write([]byte("true"))
+		return
+	}
+	fmt.Printf("title is %s\n", req.FormValue("title"))
+	switch req.FormValue("title") {
+	case "delayMore":
+		delay *= 2
+	case "delayLess":
+		delay /= 2
+	case "stopLife":
+		stop = 1
+	case "startLife":
+		stop = 0
+	}
+	eventCh <- fmt.Sprintf("refresh({\"delay\":%f,\"stop\":%d})", delay, stop)
+}
+
+// Long-polled URL.  What happens if the connection times out?
+func Updates(w http.ResponseWriter, req *http.Request) {
+	w.Write([]byte(<-eventCh))
+}
+
+func LifeServer(w http.ResponseWriter, req *http.Request) {
+	http.ServeFile(w, req, "life.html")
+}
+
+func display(u *universe) (m *image.NRGBA) {
+	red := color.RGBA{255, 0, 0, 255}
+	m = image.NewNRGBA(image.Rect(u.minx, u.miny, u.maxx+1, u.maxy+1))
+	for c := range u.cells {
+		m.Set(c.x, c.y, red)
+	}
+	return
+}
+
 func make_universe() *universe {
-	//   x
-	// x x
-	//  xx
-	u := newUniverse(nil)
-	n := 0
-	                                    u.addXY(n+2, n+0)
-	u.addXY(n+0,n+1);                   u.addXY(n+2, n+1)
-	                  u.addXY(n+1,n+2); u.addXY(n+2, n+2)
+	u := newUniverse()
 
-	n = 5
-	                                    u.addXY(n+2, n+0)
-	u.addXY(n+0,n+1);                   u.addXY(n+2, n+1)
-	                  u.addXY(n+1,n+2); u.addXY(n+2, n+2)
-
-	n = 10
-	                                    u.addXY(n+2, n+0)
-	u.addXY(n+0,n+1);                   u.addXY(n+2, n+1)
-	                  u.addXY(n+1,n+2); u.addXY(n+2, n+2)
+	// R-pentomino
+	//  XX
+	// XX
+	//  X
+	u.addXY(1, 0)
+	u.addXY(2, 0)
+	u.addXY(0, 1)
+	u.addXY(1, 1)
+	u.addXY(1, 2)
 	return u
 }
 
 func (u *universe) addXY(x, y int) {
-	u.addCell(cell{x, y })
+	u.addCell(cell{x, y})
 }
 
 func (u *universe) addCell(c cell) {
-	u.cells[c] = true
+	u.cells[c] = 1
 	u.minx = min(u.minx, c.x)
 	u.miny = min(u.miny, c.y)
 	u.maxx = max(u.maxx, c.x)
@@ -66,117 +128,70 @@ func (u *universe) addCell(c cell) {
 }
 
 func next_gen() *universe {
-	checkCells := make(chan cell)
-	newCells := make(chan cell)
+	checkCellsCh := make(chan cell)
+	neighborCountCh := make(chan map[cell]byte)
 	newUniverseCh := make(chan *universe)
-	doneCh := make(chan int)
-	for n := 0; n < runtime.NumCPU(); n++ {
-		go calcCell(checkCells, newCells, doneCh)
+	var wg sync.WaitGroup
+	for n := 0; n < numCPU; n++ {
+		wg.Add(1)
+		go calcCell(checkCellsCh, neighborCountCh, &wg)
 	}
-	go recordResults(newCells, newUniverseCh)
-	seen := make(map[cell]bool)
+	go recordResults(neighborCountCh, newUniverseCh)
 	for c := range u.cells {
-		checkCells <- c
-		checkNeighbor(checkCells, seen, c, -1, -1)
-		checkNeighbor(checkCells, seen, c,  0, -1)
-		checkNeighbor(checkCells, seen, c, +1, -1)
-		checkNeighbor(checkCells, seen, c, -1,  0)
-		checkNeighbor(checkCells, seen, c,  1,  0)
-		checkNeighbor(checkCells, seen, c, -1,  1)
-		checkNeighbor(checkCells, seen, c,  0,  1)
-		checkNeighbor(checkCells, seen, c, -1,  1)
+		checkCellsCh <- c
 	}
-	close(checkCells)
-	for n := 0; n < runtime.NumCPU(); n++ {
-		<- doneCh
-	}
-	close(newCells)
-	return <- newUniverseCh
+	close(checkCellsCh)
+	wg.Wait()
+	close(neighborCountCh)
+	return <-newUniverseCh
 }
 
-func checkNeighbor(checkCells chan cell, seen map[cell]bool, c cell, x, y int) {
-	neighborCell := cell{c.x+x, c.y+y}
-	if u.cells[neighborCell] ||
-	   seen[neighborCell] {
-		return
+func calcCell(checkCellsCh chan cell,
+	neighborCountCh chan map[cell]byte,
+	wg *sync.WaitGroup) {
+	neighborCount := make(map[cell]byte)
+	for c := range checkCellsCh {
+		neighborCount[cell{c.x - 1, c.y - 1}]++
+		neighborCount[cell{c.x, c.y - 1}]++
+		neighborCount[cell{c.x + 1, c.y - 1}]++
+
+		neighborCount[cell{c.x - 1, c.y}]++
+		neighborCount[cell{c.x + 1, c.y}]++
+
+		neighborCount[cell{c.x - 1, c.y + 1}]++
+		neighborCount[cell{c.x, c.y + 1}]++
+		neighborCount[cell{c.x + 1, c.y + 1}]++
 	}
-	seen[neighborCell] = true
-	checkCells <- neighborCell
+	neighborCountCh <- neighborCount
+	wg.Done()
 }
 
-func calcCell(checkCells, newCells chan cell, doneCh chan int) {
-	for c := range checkCells {
-		n := neighbors(c)
-		if n == 3 ||
-		   (n == 2 &&
-			 u.cells[c]) {
-			newCells <- c
+func recordResults(neighborCountCh chan map[cell]byte,
+	newUniverseCh chan *universe) {
+	newU := newUniverse()
+	allNeighbors := <-neighborCountCh
+	for moreNeighbors := range neighborCountCh {
+		for c, neighbors := range moreNeighbors {
+			allNeighbors[c] += neighbors
 		}
 	}
-	doneCh <- 1
-}
-
-func recordResults(newCells chan cell, newUniverseCh chan *universe) {
-	newU := newUniverse(u)
-	for c := range newCells {
-		newU.addCell(c)
+	for c, neighbors := range allNeighbors {
+		if neighbors == 3 ||
+			u.cells[c] == 1 && (neighbors == 2) {
+			newU.addCell(c)
+		}
 	}
 	newUniverseCh <- newU
 }
 
-func newUniverse(parent *universe) *universe {
+func newUniverse() *universe {
 	var u universe
-	u.cells = make(map[cell]bool)
-	if (parent == nil) {
-		u.minx = math.MaxInt16
-		u.miny = math.MaxInt16
-	} else {
-		u.minx = parent.minx
-		u.miny = parent.miny
-	}
+	u.cells = make(map[cell]byte)
+	u.minx = math.MaxInt16
+	u.miny = math.MaxInt16
 	u.maxx = -math.MaxInt16
 	u.maxy = -math.MaxInt16
 	return &u
-}
-
-func neighbors(c cell) int {
-	n := 0
-
-	if u.cells[cell{c.x-1, c.y-1}] { n++ }
-	if u.cells[cell{c.x,   c.y-1}] { n++ }
-	if u.cells[cell{c.x+1, c.y-1}] { n++ }
-
-	if u.cells[cell{c.x-1, c.y  }] { n++ }
-	if u.cells[cell{c.x+1, c.y  }] { n++ }
-
-	if u.cells[cell{c.x-1, c.y+1}] { n++ }
-	if u.cells[cell{c.x,   c.y+1}] { n++ }
-	if u.cells[cell{c.x+1, c.y+1}] { n++ }
-
-	return n
-}
-
-func display(u *universe) {
-	var c cell
-	fmt.Printf( "%c[H%c[2J", 27, 27 )
-	fmt.Println()
-	for y := u.miny; y <= u.maxy; y++ {
-		found := false
-		s := ""
-		for x := u.minx; x <= u.maxx; x++ {
-			c.x = x; c.y = y
-			if u.cells[c] {
-				s = s + "X"
-				found = true
-			} else {
-				s = s + " "
-			}
-		}
-		if found { fmt.Print(s) }
-		fmt.Println()
-	}
-	fmt.Println()
-	time.Sleep(1e7)
 }
 
 func min(a, b int) int {
@@ -192,4 +207,3 @@ func max(a, b int) int {
 	}
 	return a
 }
-
