@@ -31,6 +31,7 @@ var u *universe
 var uCh chan *universe
 var numCPU int = runtime.NumCPU()
 var eventCh chan string = make(chan string)
+var gen int = 0
 
 func main() {
 	runtime.GOMAXPROCS(numCPU)
@@ -44,6 +45,7 @@ func main() {
 	}()
 
 	http.HandleFunc("/life.html", LifeServer)
+	http.HandleFunc("/life.js", LifeJS)
 	http.HandleFunc("/life.png", LifeImage)
 	http.HandleFunc("/button", Button)
 	http.HandleFunc("/updates", Updates)
@@ -54,7 +56,13 @@ func main() {
 	}
 }
 
-var gen int = 0
+func LifeServer(w http.ResponseWriter, req *http.Request) {
+	http.ServeFile(w, req, "life.html")
+}
+
+func LifeJS(w http.ResponseWriter, req *http.Request) {
+	http.ServeFile(w, req, "life.js")
+}
 
 func LifeImage(w http.ResponseWriter, req *http.Request) {
 	fmt.Printf("gen: %d\r", gen)
@@ -85,10 +93,6 @@ func Button(w http.ResponseWriter, req *http.Request) {
 // Long-polled URL.  What happens if the connection times out?
 func Updates(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte(<-eventCh))
-}
-
-func LifeServer(w http.ResponseWriter, req *http.Request) {
-	http.ServeFile(w, req, "life.html")
 }
 
 func display(u *universe) (m *image.NRGBA) {
