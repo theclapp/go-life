@@ -25,13 +25,14 @@ type universe struct {
 }
 
 var delay float32 = 800.0
-var stop int = 0
+var stop = 0
+var sessionNum = 0
 
 var u *universe
 var uCh chan *universe
-var numCPU int = runtime.NumCPU()
-var eventCh chan string = make(chan string)
-var gen int = 0
+var numCPU = runtime.NumCPU()
+var eventCh = make(chan string)
+var gen = 0
 
 func main() {
 	runtime.GOMAXPROCS(numCPU)
@@ -56,7 +57,22 @@ func main() {
 	}
 }
 
+func curFuncName() string {
+	pc, _, _, _ := runtime.Caller(1)
+	return runtime.FuncForPC(pc).Name()
+}
+
 func LifeServer(w http.ResponseWriter, req *http.Request) {
+	_, err := req.Cookie("session")
+	if err != nil {
+		fmt.Printf("%s: No session cookie; setting %d\n", curFuncName(), sessionNum)
+		http.SetCookie(w, &http.Cookie{
+			Name:   "session",
+			Value:  fmt.Sprintf("%d", sessionNum),
+			MaxAge: 10,
+		})
+		sessionNum++
+	}
 	http.ServeFile(w, req, "life.html")
 }
 
@@ -73,7 +89,6 @@ func LifeImage(w http.ResponseWriter, req *http.Request) {
 func Button(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
-		w.Write([]byte("true"))
 		return
 	}
 	fmt.Printf("title is %s\n", req.FormValue("title"))
@@ -84,15 +99,33 @@ func Button(w http.ResponseWriter, req *http.Request) {
 		delay /= 2
 	case "stopLife":
 		stop = 1
+		delay++
 	case "startLife":
 		stop = 0
+		delay--
+	case "clearSession":
+		http.SetCookie(w, &http.Cookie{
+			Name:   "session",
+			MaxAge: -1,
+		})
 	}
-	eventCh <- fmt.Sprintf("refresh({\"delay\":%f,\"stop\":%d})", delay, stop)
+	event := fmt.Sprintf(`refresh({"delay":%f,"stop":%d})`, delay, stop)
+	fmt.Println("event is " + event)
+	eventCh <- event
 }
 
-// Long-polled URL.  What happens if the connection times out?
+// Long-polled URL.  What happens if the connection times out, or is closed?
+// Indeed, that's exactly what happens (the socket is closed) if you press
+// Reload on the browser.
 func Updates(w http.ResponseWriter, req *http.Request) {
-	w.Write([]byte(<-eventCh))
+	fmt.Printf("starting Updates, req is %p\n", req)
+	event := <-eventCh
+	fmt.Printf("event recieved for req %p; event is %s\n", req, event)
+	_, err := w.Write([]byte(event))
+	if err != nil {
+		fmt.Printf("write error in Updates for %p\n", req)
+	}
+	fmt.Printf("Updates finished for req %p\n", req)
 }
 
 func display(u *universe) (m *image.NRGBA) {
