@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"runtime"
 	"sync"
+	"html/template"
 	// "time"
 )
 
@@ -24,14 +25,27 @@ type universe struct {
 	minx, miny, maxx, maxy int
 }
 
+type Page struct {
+	PageId string
+}
+
+type session struct {
+	id string
+	nextPageId int
+	// map pageIds to listener channels
+	listeners map[string]chan string
+}
+
+var sessions = make(map[string]*session)
+var templates = make(map[string]*template.Template)
+
 var delay float32 = 800.0
 var stop = 0
-var sessionNum = 0
+var nextSessionNum = 0
 
 var u *universe
 var uCh chan *universe
 var numCPU = runtime.NumCPU()
-var eventCh = make(chan string)
 var gen = 0
 
 func main() {
@@ -45,6 +59,8 @@ func main() {
 		}
 	}()
 
+	templates["life"] = template.Must(template.ParseFiles("life.html"))
+
 	http.HandleFunc("/life.html", LifeServer)
 	http.HandleFunc("/life.js", LifeJS)
 	http.HandleFunc("/life.png", LifeImage)
@@ -57,29 +73,65 @@ func main() {
 	}
 }
 
-func curFuncName() string {
-	pc, _, _, _ := runtime.Caller(1)
+func curFuncName(n int) string {
+	pc, _, _, _ := runtime.Caller(n+1)
 	return runtime.FuncForPC(pc).Name()
 }
 
 func LifeServer(w http.ResponseWriter, req *http.Request) {
-	_, err := req.Cookie("session")
+	s := getSession(w, req)
+	p := Page{PageId: s.getNextPageId()}
+	err := templates["life"].Execute(w, p)
 	if err != nil {
-		fmt.Printf("%s: No session cookie; setting %d\n", curFuncName(), sessionNum)
-		http.SetCookie(w, &http.Cookie{
-			Name:   "session",
-			Value:  fmt.Sprintf("%d", sessionNum),
-			MaxAge: 10,
-		})
-		sessionNum++
+		fmt.Println("Error rendering life.html template")
 	}
-	http.ServeFile(w, req, "life.html")
+	// Force an update on all listeners; clears closed listeners.
+	for _, listener := range s.listeners {
+		listener <- "true"
+	}
+}
+
+func (s *session) getNextPageId() (result string) {
+	result = fmt.Sprintf("%d", s.nextPageId)
+	s.nextPageId++
+	return
+}
+
+func getSession(w http.ResponseWriter, req *http.Request) *session {
+	var sessionId string
+	sessionIdCookie, err := req.Cookie("session")
+	if err == nil {
+		sessionId = sessionIdCookie.Value
+		if sessions[sessionId] == nil {
+			fmt.Printf("%s: Invalid session cookie: %s\n", curFuncName(1), sessionId)
+		} else {
+			return sessions[sessionId]
+		}
+	}
+
+	fmt.Printf("%s: No session cookie; setting %d\n", curFuncName(1), nextSessionNum)
+	sessionId = fmt.Sprintf("%d", nextSessionNum)
+	sessionIdCookie = &http.Cookie{
+		Name:   "session",
+		Value:  sessionId,
+		MaxAge: 3600,
+	}
+	http.SetCookie(w, sessionIdCookie)
+	sessions[sessionId] = &session{
+		id: sessionId,
+		nextPageId: 0,
+		listeners: make(map[string]chan string),
+	}
+	nextSessionNum++
+	return sessions[sessionId]
 }
 
 func LifeJS(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("Serving LifeJS")
 	http.ServeFile(w, req, "life.js")
 }
 
+// FIXME ticks once per *window*.  So 3 windows, 3 generations per tick.
 func LifeImage(w http.ResponseWriter, req *http.Request) {
 	fmt.Printf("gen: %d\r", gen)
 	gen++
@@ -89,10 +141,20 @@ func LifeImage(w http.ResponseWriter, req *http.Request) {
 func Button(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
+		fmt.Println("Could not parse form in Button()")
 		return
 	}
-	fmt.Printf("title is %s\n", req.FormValue("title"))
-	switch req.FormValue("title") {
+	whichButton := req.FormValue("title")
+	fmt.Printf("title is %s\n", whichButton)
+
+	s := getSession(w, req)
+
+	if len(s.listeners) == 0 {
+		fmt.Println("No listeners for session", s.id)
+		return
+	}
+
+	switch whichButton {
 	case "delayMore":
 		delay *= 2
 	case "delayLess":
@@ -109,23 +171,35 @@ func Button(w http.ResponseWriter, req *http.Request) {
 			MaxAge: -1,
 		})
 	}
+
 	event := fmt.Sprintf(`refresh({"delay":%f,"stop":%d})`, delay, stop)
 	fmt.Println("event is " + event)
-	eventCh <- event
+	for _, listener := range s.listeners {
+		listener <- event
+	}
 }
 
 // Long-polled URL.  What happens if the connection times out, or is closed?
 // Indeed, that's exactly what happens (the socket is closed) if you press
 // Reload on the browser.
+// Current implementation is not threadsafe.
 func Updates(w http.ResponseWriter, req *http.Request) {
-	fmt.Printf("starting Updates, req is %p\n", req)
-	event := <-eventCh
-	fmt.Printf("event recieved for req %p; event is %s\n", req, event)
+	s := getSession(w, req)
+	pageId := req.FormValue("pageId")
+	fmt.Printf("starting Updates, pageId is %s, req is %p\n", pageId, req)
+	listener := make(chan string)
+	s.listeners[pageId] = listener
+
+	event := <-listener
+	fmt.Printf("event recieved for req %p, pageId %s; event is %s\n", req, pageId, event)
 	_, err := w.Write([]byte(event))
 	if err != nil {
 		fmt.Printf("write error in Updates for %p\n", req)
 	}
-	fmt.Printf("Updates finished for req %p\n", req)
+	fmt.Printf("Updates finished for req %p, pageId %s\n", req, pageId)
+
+	// FIXME this is not threadsafe
+	delete(s.listeners, pageId)
 }
 
 func display(u *universe) (m *image.NRGBA) {

@@ -6,6 +6,7 @@ var startStopLog = document.getElementById("startStopLog")
 var delayDiv = document.getElementById("delay")
 var log = document.getElementById("Log")
 var log2 = document.getElementById("Log2")
+var pageId = document.getElementById("pageId").innerHTML
 delay = delayDiv.innerHTML
 
 var nextImageIntervalID
@@ -21,7 +22,7 @@ function getUpdates() {
 	}
 
 	xmlhttp.onreadystatechange=function() {
-		alert(xmlhttp.readyState +" "+xmlhttp.status)
+		// alert(xmlhttp.readyState +" "+xmlhttp.status)
 		if (xmlhttp.readyState == 4) {
 			if (xmlhttp.status == 200) {
 				// alert("response is " + xmlhttp.responseText)
@@ -31,12 +32,12 @@ function getUpdates() {
 				// setTimeout(function(){getUpdates()}, 1000)
 			}
 			// Send another long poll
-			xmlhttp.open("GET", "updates", true)
+			xmlhttp.open("GET", "/updates?pageId=" + pageId, true)
 			xmlhttp.send()
 		}
 	}
 
-	xmlhttp.open("GET", "updates", true)
+	xmlhttp.open("GET", "/updates?pageId=" + pageId, true)
 	xmlhttp.send()
 }
 
@@ -50,7 +51,7 @@ function sendButton(event) {
 	   xmlhttp=new ActiveXObject("Microsoft.XMLHTTP")
 	}
 	// Response via getUpdates() loop
-	xmlhttp.open("GET", "button?title=" + event.target.id, true)
+	xmlhttp.open("GET", "/button?pageId=" + pageId + "&title=" + event.target.id, true)
 	xmlhttp.send()
 }
 

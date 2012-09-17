@@ -4,22 +4,21 @@
 
 <html>
 <body>
+	Page id is <span id="pageId">{{.PageId}}</span><br/>
+	Delay is <span id="delay">800</span><br/>
+	Stop is <span id="stopLog">0</span><br/>
+	Start/Stop status is <span id="startStopLog">running</span><br/>
+	Log <span id="Log"></span><br/>
+	Log2 <span id="Log2"></span><br/>
 
-Delay is <span id="delay">800</span><br/>
-Stop is <span id="stopLog">0</span><br/>
-Start/Stop status is <span id="startStopLog">running</span><br/>
-Log <span id="Log"></span><br/>
-Log2 <span id="Log2"></span><br/>
+	<button id="delayMore" type="button" onclick="sendButton(event)">Delay More</button>
+	<button id="delayLess" type="button" onclick="sendButton(event)">Delay Less</button>
+	<button id="stopLife"  type="button" onclick="sendButton(event)">Stop</button>
+	<button id="startLife" type="button" onclick="sendButton(event)">Start</button>
+	<button id="clearSession" type="button" onclick="sendButton(event)">Clear session cookie</button>
+	<br/>
+	<img id="life" src="/life.png"/>
 
-<button id="delayMore" type="button" onclick="sendButton(event)">Delay More</button>
-<button id="delayLess" type="button" onclick="sendButton(event)">Delay Less</button>
-<button id="stopLife"  type="button" onclick="sendButton(event)">Stop</button>
-<button id="startLife" type="button" onclick="sendButton(event)">Start</button>
-<button id="clearSession" type="button" onclick="sendButton(event)">Clear session cookie</button>
-<br/>
-<img id="life" src="/life.png"/>
-
-<script src="life.js"></script>
-
+	<script src="life.js"></script>
 </body>
 </html>
