@@ -25,40 +25,30 @@ type universe struct {
 	minx, miny, maxx, maxy int
 }
 
-type Page struct {
-	PageId string
-}
+type sessionId string
 
 type session struct {
-	id string
+	sid        sessionId
 	nextPageId int
 	// map pageIds to listener channels
 	listeners map[string]chan string
+	delay     float32
+	stop      int
+	uCh		 chan *universe
+	u         *universe
+	numU      int
+	gen       int
 }
 
-var sessions = make(map[string]*session)
+var sessions = make(map[sessionId]*session)
 var templates = make(map[string]*template.Template)
 
-var delay float32 = 800.0
-var stop = 0
 var nextSessionNum = 0
 
-var u *universe
-var uCh chan *universe
 var numCPU = runtime.NumCPU()
-var gen = 0
 
 func main() {
 	runtime.GOMAXPROCS(numCPU)
-	u = make_universe()
-	uCh = make(chan *universe, 10)
-	go func() {
-		for {
-			uCh <- u
-			u = next_gen()
-		}
-	}()
-
 	templates["life"] = template.Must(template.ParseFiles("life.html"))
 
 	http.HandleFunc("/life.html", LifeServer)
@@ -80,8 +70,7 @@ func curFuncName(n int) string {
 
 func LifeServer(w http.ResponseWriter, req *http.Request) {
 	s := getSession(w, req)
-	p := Page{PageId: s.getNextPageId()}
-	err := templates["life"].Execute(w, p)
+	err := templates["life"].Execute(w, struct{PageId string}{s.getNextPageId()})
 	if err != nil {
 		fmt.Println("Error rendering life.html template")
 	}
@@ -97,47 +86,28 @@ func (s *session) getNextPageId() (result string) {
 	return
 }
 
-func getSession(w http.ResponseWriter, req *http.Request) *session {
-	var sessionId string
-	sessionIdCookie, err := req.Cookie("session")
-	if err == nil {
-		sessionId = sessionIdCookie.Value
-		if sessions[sessionId] == nil {
-			fmt.Printf("%s: Invalid session cookie: %s\n", curFuncName(1), sessionId)
-		} else {
-			return sessions[sessionId]
-		}
-	}
-
-	fmt.Printf("%s: No session cookie; setting %d\n", curFuncName(1), nextSessionNum)
-	sessionId = fmt.Sprintf("%d", nextSessionNum)
-	sessionIdCookie = &http.Cookie{
-		Name:   "session",
-		Value:  sessionId,
-		MaxAge: 3600,
-	}
-	http.SetCookie(w, sessionIdCookie)
-	sessions[sessionId] = &session{
-		id: sessionId,
-		nextPageId: 0,
-		listeners: make(map[string]chan string),
-	}
-	nextSessionNum++
-	return sessions[sessionId]
-}
-
 func LifeJS(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Serving LifeJS")
 	http.ServeFile(w, req, "life.js")
 }
 
-// FIXME ticks once per *window*.  So 3 windows, 3 generations per tick.
+// FIXME not threadsafe: writes on s
 func LifeImage(w http.ResponseWriter, req *http.Request) {
-	fmt.Printf("gen: %d\r", gen)
-	gen++
-	png.Encode(w, display(<-uCh))
+	pageId := req.FormValue("pageId")
+	s := getSession(w, req)
+	if s.numU < len(s.listeners) {
+		s.numU++
+	} else {
+		s.u = <-s.uCh
+		s.gen++
+		s.numU = 0
+	}
+	fmt.Printf("session: %s, pageId: %s, gen: %d\r", s.sid, pageId, s.gen)
+	// FIXME this renders the image repeatedly and is quite inefficient
+	png.Encode(w, display(s.u))
 }
 
+// FIXME not threadsafe: writes on s
 func Button(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
@@ -150,21 +120,21 @@ func Button(w http.ResponseWriter, req *http.Request) {
 	s := getSession(w, req)
 
 	if len(s.listeners) == 0 {
-		fmt.Println("No listeners for session", s.id)
+		fmt.Println("No listeners for session", s.sid)
 		return
 	}
 
 	switch whichButton {
 	case "delayMore":
-		delay *= 2
+		s.delay *= 2
 	case "delayLess":
-		delay /= 2
+		s.delay /= 2
 	case "stopLife":
-		stop = 1
-		delay++
+		s.stop = 1
+		s.delay++
 	case "startLife":
-		stop = 0
-		delay--
+		s.stop = 0
+		s.delay--
 	case "clearSession":
 		http.SetCookie(w, &http.Cookie{
 			Name:   "session",
@@ -172,7 +142,7 @@ func Button(w http.ResponseWriter, req *http.Request) {
 		})
 	}
 
-	event := fmt.Sprintf(`refresh({"delay":%f,"stop":%d})`, delay, stop)
+	event := fmt.Sprintf(`refresh({"delay":%f,"stop":%d})`, s.delay, s.stop)
 	fmt.Println("event is " + event)
 	for _, listener := range s.listeners {
 		listener <- event
@@ -181,7 +151,7 @@ func Button(w http.ResponseWriter, req *http.Request) {
 
 // Long-polled URL.  What happens if the connection times out, or is closed?
 // Indeed, that's exactly what happens (the socket is closed) if you press
-// Reload on the browser.
+// reload on the browser.
 // Current implementation is not threadsafe.
 func Updates(w http.ResponseWriter, req *http.Request) {
 	s := getSession(w, req)
@@ -198,8 +168,46 @@ func Updates(w http.ResponseWriter, req *http.Request) {
 	}
 	fmt.Printf("Updates finished for req %p, pageId %s\n", req, pageId)
 
-	// FIXME this is not threadsafe
+	// FIXME this is not threadsafe: writes on s
 	delete(s.listeners, pageId)
+}
+
+// FIXME not threadsafe: writes on sessions[]
+func getSession(w http.ResponseWriter, req *http.Request) *session {
+	var sid sessionId
+	sessionCookie, err := req.Cookie("session")
+	if err == nil {
+		sid = sessionId(sessionCookie.Value)
+		if sessions[sid] == nil {
+			fmt.Printf("%s: Invalid session cookie: %s\n", curFuncName(1), sid)
+		} else {
+			return sessions[sid]
+		}
+	}
+
+	fmt.Printf("%s: No session cookie; setting %d\n", curFuncName(1), nextSessionNum)
+	sid = sessionId(fmt.Sprintf("%d", nextSessionNum))
+	sessionCookie = &http.Cookie{
+		Name:   "session",
+		Value:  string(sid),
+		MaxAge: 3600,
+	}
+	http.SetCookie(w, sessionCookie)
+	sessions[sid] = &session{
+		sid: sid,
+		listeners: make(map[string]chan string),
+		delay: 800.00,
+		uCh: make(chan *universe),
+	}
+	nextSessionNum++
+	go func(s *session) {
+		u := makeUniverse()
+		for {
+			s.uCh <- u
+			u = nextGen(u)
+		}
+	}(sessions[sid])
+	return sessions[sid]
 }
 
 func display(u *universe) (m *image.NRGBA) {
@@ -211,7 +219,7 @@ func display(u *universe) (m *image.NRGBA) {
 	return
 }
 
-func make_universe() *universe {
+func makeUniverse() *universe {
 	u := newUniverse()
 
 	// R-pentomino
@@ -238,7 +246,7 @@ func (u *universe) addCell(c cell) {
 	u.maxy = max(u.maxy, c.y)
 }
 
-func next_gen() *universe {
+func nextGen(u *universe) *universe {
 	checkCellsCh := make(chan cell)
 	neighborCountCh := make(chan map[cell]byte)
 	newUniverseCh := make(chan *universe)
@@ -247,7 +255,7 @@ func next_gen() *universe {
 		wg.Add(1)
 		go calcCell(checkCellsCh, neighborCountCh, &wg)
 	}
-	go recordResults(neighborCountCh, newUniverseCh)
+	go recordResults(u, neighborCountCh, newUniverseCh)
 	for c := range u.cells {
 		checkCellsCh <- c
 	}
@@ -277,7 +285,8 @@ func calcCell(checkCellsCh chan cell,
 	wg.Done()
 }
 
-func recordResults(neighborCountCh chan map[cell]byte,
+func recordResults(u *universe,
+	neighborCountCh chan map[cell]byte,
 	newUniverseCh chan *universe) {
 	newU := newUniverse()
 	allNeighbors := <-neighborCountCh
