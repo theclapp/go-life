@@ -38,9 +38,11 @@ type session struct {
 	u         *universe
 	numU      int
 	gen       int
+	sync.Mutex
 }
 
 var sessions = make(map[sessionId]*session)
+var sessionsLock sync.Mutex
 var templates = make(map[string]*template.Template)
 
 var nextSessionNum = 0
@@ -80,8 +82,10 @@ func LifeServer(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// FIXME Locks the session
 func (s *session) getNextPageId() (result string) {
 	result = fmt.Sprintf("%d", s.nextPageId)
+	s.Lock(); defer s.Unlock()
 	s.nextPageId++
 	return
 }
@@ -91,23 +95,27 @@ func LifeJS(w http.ResponseWriter, req *http.Request) {
 	http.ServeFile(w, req, "life.js")
 }
 
-// FIXME not threadsafe: writes on s
+// FIXME Locks the session.
 func LifeImage(w http.ResponseWriter, req *http.Request) {
 	pageId := req.FormValue("pageId")
 	s := getSession(w, req)
+	s.Lock();
 	if s.numU < len(s.listeners) {
 		s.numU++
 	} else {
 		s.u = <-s.uCh
 		s.gen++
-		s.numU = 0
+		s.numU = 1
 	}
-	fmt.Printf("session: %s, pageId: %s, gen: %d\r", s.sid, pageId, s.gen)
+	curU := s.u
+	fmt.Printf("session: %s, pageId: %s, gen: %d, numU: %d, #listeners: %d\n",
+		s.sid, pageId, s.gen, s.numU, len(s.listeners))
+	s.Unlock()
 	// FIXME this renders the image repeatedly and is quite inefficient
-	png.Encode(w, display(s.u))
+	png.Encode(w, display(curU))
 }
 
-// FIXME not threadsafe: writes on s
+// FIXME Locks the session.
 func Button(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
@@ -124,6 +132,7 @@ func Button(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	s.Lock();
 	switch whichButton {
 	case "delayMore":
 		s.delay *= 2
@@ -141,6 +150,7 @@ func Button(w http.ResponseWriter, req *http.Request) {
 			MaxAge: -1,
 		})
 	}
+	s.Unlock()
 
 	event := fmt.Sprintf(`refresh({"delay":%f,"stop":%d})`, s.delay, s.stop)
 	fmt.Println("event is " + event)
@@ -152,13 +162,15 @@ func Button(w http.ResponseWriter, req *http.Request) {
 // Long-polled URL.  What happens if the connection times out, or is closed?
 // Indeed, that's exactly what happens (the socket is closed) if you press
 // reload on the browser.
-// Current implementation is not threadsafe.
+// FIXME Locks the session.
 func Updates(w http.ResponseWriter, req *http.Request) {
 	s := getSession(w, req)
 	pageId := req.FormValue("pageId")
 	fmt.Printf("starting Updates, pageId is %s, req is %p\n", pageId, req)
 	listener := make(chan string)
+	s.Lock()
 	s.listeners[pageId] = listener
+	s.Unlock()
 
 	event := <-listener
 	fmt.Printf("event recieved for req %p, pageId %s; event is %s\n", req, pageId, event)
@@ -168,13 +180,15 @@ func Updates(w http.ResponseWriter, req *http.Request) {
 	}
 	fmt.Printf("Updates finished for req %p, pageId %s\n", req, pageId)
 
-	// FIXME this is not threadsafe: writes on s
+	s.Lock()
 	delete(s.listeners, pageId)
+	s.Unlock()
 }
 
-// FIXME not threadsafe: writes on sessions[]
+// FIXME locks sessions[]
 func getSession(w http.ResponseWriter, req *http.Request) *session {
 	var sid sessionId
+	sessionsLock.Lock(); defer sessionsLock.Unlock()
 	sessionCookie, err := req.Cookie("session")
 	if err == nil {
 		sid = sessionId(sessionCookie.Value)

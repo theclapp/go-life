@@ -1,0 +1,6 @@
+.*.sw?
+.sw?
+Session.vim
+tags
+*.bak
+.*.bak
