@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"runtime"
 	"sync"
 )
 
@@ -45,6 +46,7 @@ func getSession(w http.ResponseWriter, req *http.Request) *session {
 
 	fmt.Printf("%s: No session cookie; setting %d\n", curFuncName(1), nextSessionNum)
 	sid = sessionId(fmt.Sprintf("%d", nextSessionNum)) // type conversion
+	nextSessionNum++
 	sessionCookie = &http.Cookie{
 		Name:   "session",
 		Value:  string(sid),
@@ -57,14 +59,7 @@ func getSession(w http.ResponseWriter, req *http.Request) *session {
 		delay:     800.00,
 		uCh:       make(chan *universe),
 	}
-	nextSessionNum++
-	go func(s *session) {
-		u := makeUniverse()
-		for {
-			s.uCh <- u
-			u = nextGen(u)
-		}
-	}(sessions[sid])
+	go nextGenLoop(sessions[sid].uCh)
 	return sessions[sid]
 }
 

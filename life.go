@@ -28,6 +28,15 @@ func display(u *universe) (m *image.NRGBA) {
 	return
 }
 
+// Called from session.go
+func nextGenLoop(uCh chan *universe) {
+	u := makeUniverse()
+	for {
+		uCh <- u
+		u = nextGen(u)
+	}
+}
+
 func makeUniverse() *universe {
 	u := newUniverse()
 
