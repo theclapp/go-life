@@ -84,8 +84,8 @@ func LifeServer(w http.ResponseWriter, req *http.Request) {
 
 // FIXME Locks the session
 func (s *session) getNextPageId() (result string) {
-	result = fmt.Sprintf("%d", s.nextPageId)
 	s.Lock(); defer s.Unlock()
+	result = fmt.Sprintf("%d", s.nextPageId)
 	s.nextPageId++
 	return
 }
@@ -115,7 +115,7 @@ func LifeImage(w http.ResponseWriter, req *http.Request) {
 	png.Encode(w, display(curU))
 }
 
-// FIXME Locks the session.
+// FIXME Locks the session, and sometimes sessions[]
 func Button(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
@@ -145,6 +145,9 @@ func Button(w http.ResponseWriter, req *http.Request) {
 		s.stop = 0
 		s.delay--
 	case "clearSession":
+		sessionsLock.Lock()
+		delete(sessions, s.sid)
+		sessionsLock.Unlock()
 		http.SetCookie(w, &http.Cookie{
 			Name:   "session",
 			MaxAge: -1,
