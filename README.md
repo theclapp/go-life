@@ -7,7 +7,7 @@ Life in the browser.
 
 To run:
 
-go run life.go
+go run life.go web.go session.go
 
 Browse to localhost:6080/life.html
 
