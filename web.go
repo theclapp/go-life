@@ -30,11 +30,6 @@ func main() {
 	}
 }
 
-func curFuncName(n int) string {
-	pc, _, _, _ := runtime.Caller(n + 1)
-	return runtime.FuncForPC(pc).Name()
-}
-
 func LifeServer(w http.ResponseWriter, req *http.Request) {
 	s := getSession(w, req)
 	err := templates["life"].Execute(w, struct{ PageId string }{s.getNextPageId()})

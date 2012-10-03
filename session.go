@@ -35,7 +35,7 @@ func getSession(w http.ResponseWriter, req *http.Request) *session {
 	defer sessionsLock.Unlock()
 	sessionCookie, err := req.Cookie("session")
 	if err == nil {
-		sid = sessionId(sessionCookie.Value)
+		sid = sessionId(sessionCookie.Value) // type conversion
 		if sessions[sid] == nil {
 			fmt.Printf("%s: Invalid session cookie: %s\n", curFuncName(1), sid)
 		} else {
@@ -44,7 +44,7 @@ func getSession(w http.ResponseWriter, req *http.Request) *session {
 	}
 
 	fmt.Printf("%s: No session cookie; setting %d\n", curFuncName(1), nextSessionNum)
-	sid = sessionId(fmt.Sprintf("%d", nextSessionNum))
+	sid = sessionId(fmt.Sprintf("%d", nextSessionNum)) // type conversion
 	sessionCookie = &http.Cookie{
 		Name:   "session",
 		Value:  string(sid),
@@ -66,6 +66,11 @@ func getSession(w http.ResponseWriter, req *http.Request) *session {
 		}
 	}(sessions[sid])
 	return sessions[sid]
+}
+
+func curFuncName(n int) string {
+	pc, _, _, _ := runtime.Caller(n + 1)
+	return runtime.FuncForPC(pc).Name()
 }
 
 // FIXME Locks the session: get the next PageId
