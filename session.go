@@ -29,7 +29,7 @@ var sessions = make(map[sessionId]*session)
 var sessionsLock sync.Mutex
 var nextSessionNum = 0
 
-// FIXME Locks sessions[]: add a new session.
+// NOTE: Locks sessions[]: add a new session.
 func getSession(w http.ResponseWriter, req *http.Request) *session {
 	var sid sessionId
 	sessionsLock.Lock()
@@ -68,7 +68,7 @@ func curFuncName(n int) string {
 	return runtime.FuncForPC(pc).Name()
 }
 
-// FIXME Locks the session: get the next PageId
+// NOTE: Locks the session: get the next PageId
 func (s *session) getNextPageId() (result string) {
 	s.Lock()
 	defer s.Unlock()
@@ -77,7 +77,7 @@ func (s *session) getNextPageId() (result string) {
 	return
 }
 
-// FIXME Locks the session: Get the next Universe.
+// NOTE: Locks the session: Get the next Universe.
 func (s *session) nextU(pageId string) *universe {
 	s.Lock()
 	defer s.Unlock()
@@ -93,7 +93,7 @@ func (s *session) nextU(pageId string) *universe {
 	return s.u
 }
 
-// FIXME Locks the session, and sometimes sessions[]: change delay and/or
+// NOTE: Locks the session, and sometimes sessions[]: change delay and/or
 // stop, or delete the session entirely.
 func (s *session) pressButton(w http.ResponseWriter, whichButton string) {
 	s.Lock()
@@ -121,7 +121,7 @@ func (s *session) pressButton(w http.ResponseWriter, whichButton string) {
 	}
 }
 
-// FIXME Locks the session: add a new listener
+// NOTE: Locks the session: add a new listener
 func (s *session) addListener(pageId string) chan string {
 	s.Lock()
 	defer s.Unlock()
@@ -129,7 +129,7 @@ func (s *session) addListener(pageId string) chan string {
 	return s.listeners[pageId]
 }
 
-// FIXME Locks the session: delete the listener when the event's sent.
+// NOTE: Locks the session: delete the listener when the event's sent.
 func (s *session) removeListener(pageId string) {
 	s.Lock()
 	defer s.Unlock()

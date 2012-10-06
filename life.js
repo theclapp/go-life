@@ -5,7 +5,6 @@ var delay
 var startStopLog = document.getElementById("startStopLog")
 var delayDiv = document.getElementById("delay")
 var log = document.getElementById("Log")
-var log2 = document.getElementById("Log2")
 var pageId = "pageId=" + document.getElementById("pageId").innerHTML
 delay = delayDiv.innerHTML
 

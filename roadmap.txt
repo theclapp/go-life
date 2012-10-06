@@ -2,15 +2,20 @@
 - enter patterns by hand
 - have a top page that says
   - start a new universe
-  - list universes (clickable)
-  - view universe
+    - use pre-loaded patterns
+      - names and thumbnails
+    - load a pattern
+      - from disk
+      - from a url
+    - enter a pattern by hand
+  - list current universes (click to choose one)
 - save patterns
+- reset to start pattern
 - select subpatterns; drag and drop
 - drag and drop while continuing animation
 - detect periodic patterns at fringes and delete them.  E.g. If there's a
   glider at the edge, and it's far enough away from everything else that they
   could never catch it (I think all of 2 cells might do it), delete it.
-- reset to start pattern
 - allow multiple users
   - this *may* work now
 
