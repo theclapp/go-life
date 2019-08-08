@@ -44,6 +44,8 @@ These work in the desktop app and in the browser.
 * `+` to increase the scale (zoom in) (`=` also works)
 * `<` or `,` to slow down the generations
 * `>` or `.` to speed them up
+* `p` pause
+* `c` continue
 
 You can also click-and-drag or scroll around.
 

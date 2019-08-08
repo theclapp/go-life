@@ -74,17 +74,26 @@ func main() {
 					switch e.Text {
 					case "q":
 						os.Exit(0)
+					case "p":
+						genTimer.Stop()
+						w.w.Invalidate()
+					case "c":
+						genTimer = time.NewTicker(interval)
+						w.w.Invalidate()
 					// Restart with another random universe
 					case "r":
 						w.u.Random(100, 100, 333)
+						w.w.Invalidate()
 					// Zoom out
 					case "-":
 						if w.scale > 1 {
 							w.scale--
 						}
+						w.w.Invalidate()
 					// Zoom in
 					case "+", "=":
 						w.scale++
+						w.w.Invalidate()
 					// faster
 					case ">", ".":
 						genTimer.Stop()
