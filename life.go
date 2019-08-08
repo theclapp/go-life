@@ -28,10 +28,8 @@ type (
 	}
 
 	Universe struct {
-		cells      map[Pos]bool
-		gen        int
-		minX, minY int
-		maxX, maxY int
+		cells map[Pos]bool
+		gen   int
 	}
 
 	Window struct {
@@ -76,10 +74,15 @@ func main() {
 					switch e.Text {
 					case "q":
 						os.Exit(0)
+					// Restart with another random universe
+					case "r":
+						w.u.Random(100, 100, 333)
+					// Zoom out
 					case "-":
 						if w.scale > 1 {
 							w.scale--
 						}
+					// Zoom in
 					case "+", "=":
 						w.scale++
 					// faster
@@ -144,12 +147,6 @@ func (u *Universe) NextGen() *Universe {
 	next.gen = u.gen + 1
 	checked := make(map[Pos]bool)
 	for pos := range u.cells {
-		// Track min/max dimensions
-		next.minX = min(pos.x, next.minX)
-		next.minY = min(pos.y, next.minY)
-		next.maxX = max(pos.x, next.maxX)
-		next.maxY = max(pos.y, next.maxY)
-
 		// Will this cell be alive in the next generation?
 		if n := u.NumNeighbors(pos); n == 2 || n == 3 {
 			next.Set(pos)
@@ -162,7 +159,7 @@ func (u *Universe) NextGen() *Universe {
 			{xm1, ym1}, {pos.x, ym1}, {xp1, ym1},
 			{xm1, pos.y}, {xp1, pos.y},
 			{xm1, yp1}, {pos.x, yp1}, {xp1, yp1}} {
-			if checked[neighbor] {
+			if next.cells[neighbor] || checked[neighbor] {
 				continue
 			}
 			if u.NumNeighbors(neighbor) == 3 {
@@ -232,24 +229,18 @@ func (w *Window) Layout(e app.UpdateEvent, ops *ui.Ops) {
 		Face: w.faces.For(w.regular, ui.Sp(13)),
 		Text: fmt.Sprintf("Gen: %d", w.u.gen),
 	}
-	lbl.Layout(ops, cs)
+	dims := lbl.Layout(ops, cs)
 
-	// // If the farthest cell is beyond the window edge, reduce the scale, if
-	// // possible.
-	// if w.scale > 2 &&
-	// 	(xOffset+(w.u.maxX-w.u.minX)*w.scale > e.Size.X ||
-	// 		yOffset+(w.u.maxY-w.u.minY)*w.scale > e.Size.Y) {
-	// 	w.scale--
-	// }
-
-	xOffset, yOffset := 0, 14
-	// ui.TransformOp{}.Offset(f32.Point{
-	// 	X: float32(xOffset + w.scale*-w.u.minX + 10),
-	// 	Y: float32(yOffset + w.scale*-w.u.minY + 10),
-	// }).Add(ops)
+	// Clip cells below the caption, painted above.
+	// (You'd think it'd be dims.Size.Y, not dims.Baseline, but dims.Size.Y
+	// seems to be the size of the whole window or something.)
+	paint.RectClip(image.Rectangle{
+		Min: image.Point{Y: 3 * dims.Baseline / 2},
+		Max: e.Size,
+	}).Add(ops)
 	ui.TransformOp{}.Offset(f32.Point{
-		X: float32(xOffset + w.scrollX),
-		Y: float32(yOffset + w.scrollY),
+		X: float32(w.scrollX),
+		Y: float32(w.scrollY),
 	}).Add(ops)
 	paint.ColorOp{Color: color.RGBA{A: 0xff, G: 0xff}}.Add(ops)
 	for pos := range w.u.cells {
@@ -264,6 +255,7 @@ func (w *Window) Layout(e app.UpdateEvent, ops *ui.Ops) {
 }
 
 func (u *Universe) Random(x, y, density int) {
+	*u = *NewUniverse()
 	for px := 0; px < x; px++ {
 		for py := 0; py < y; py++ {
 			if rand.Intn(1000) < density {
