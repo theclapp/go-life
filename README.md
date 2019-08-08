@@ -36,5 +36,16 @@ These work in the desktop app and in the browser.
 * `<` or `,` to slow down the generations
 * `>` or `.` to speed them up
 
+You can also click-and-drag or scroll around.
+
 You can't enter or save patterns yet.
 
+## Screenshots
+
+### macOS
+
+![Gio Life on macOS](screenshots/gio-life-mac-2019-08-08.png)
+
+### Chrome
+
+![Gio Life on Chrome](screenshots/gio-life-chrome-2019-08-08.png)
