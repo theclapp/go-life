@@ -1,3 +1,6 @@
+gioui.org v0.0.0-20190808132058-a6c262c1e117 h1:dHwE5U3bxXQIuSCgi9k9GE6y1C6lXWoG+RoZ0CSLPCc=
+gioui.org/ui v0.0.0-20190808132058-a6c262c1e117 h1:yuaB13Nhruw1kY/1kJ1/xYDKFNShOAXiNpkMcl48UhA=
+gioui.org/ui v0.0.0-20190808132058-a6c262c1e117/go.mod h1:jbaSHnW/jO2+8gOhOraRz7/3A2tntNzXF9nra6FUOr4=
 golang.org/x/image v0.0.0-20190703141733-d6a02ce849c9/go.mod h1:FeLwcggjj3mMvU+oOTbSwawSJRM1uh48EjtB4UJZlP0=
 golang.org/x/image v0.0.0-20190802002840-cff245a6509b h1:+qEpEAPhDZ1o0x3tHzZTQDArnOixOzGD9HUJfcg0mb4=
 golang.org/x/image v0.0.0-20190802002840-cff245a6509b/go.mod h1:FeLwcggjj3mMvU+oOTbSwawSJRM1uh48EjtB4UJZlP0=

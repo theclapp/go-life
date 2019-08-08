@@ -1,11 +1,8 @@
-module gophercon2019
+module github.com/theclapp/go-life
 
 go 1.13
 
-replace gioui.org/ui => /Users/lmc/src/goget/src/git.sr.ht/eliasnaur/gioui.org/ui
-
-replace github.com/theclapp/go-life/gesture => /Users/lmc/src/goget/src/github.com/theclapp/go-life/gesture
-
-replace ./gesture => /Users/lmc/src/goget/src/github.com/theclapp/go-life/gesture
-
-require github.com/theclapp/go-life/gesture v0.0.0-00010101000000-000000000000 // indirect
+require (
+	gioui.org/ui v0.0.0-20190808132058-a6c262c1e117
+	golang.org/x/image v0.0.0-20190802002840-cff245a6509b // indirect
+)

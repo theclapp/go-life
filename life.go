@@ -10,11 +10,11 @@ import (
 
 	"gioui.org/ui"
 	"gioui.org/ui/app"
-	"gioui.org/ui/draw"
 	"gioui.org/ui/f32"
 	"gioui.org/ui/key"
 	"gioui.org/ui/layout"
 	"gioui.org/ui/measure"
+	"gioui.org/ui/paint"
 	"gioui.org/ui/pointer"
 	"gioui.org/ui/text"
 	"github.com/theclapp/go-life/gesture"
@@ -95,10 +95,10 @@ func main() {
 					default:
 						// fmt.Printf("key name: %s\n", e.Text)
 					}
-				case app.DrawEvent:
+				case app.UpdateEvent:
 					ops.Reset()
 					w.Layout(e, ops)
-					w.w.Draw(ops)
+					w.w.Update(ops)
 				default:
 					// fmt.Printf("event %T %+v\n", e, e)
 				}
@@ -210,7 +210,7 @@ func max(n1, n2 int) int {
 	return n2
 }
 
-func (w *Window) Layout(e app.DrawEvent, ops *ui.Ops) {
+func (w *Window) Layout(e app.UpdateEvent, ops *ui.Ops) {
 	cfg := &e.Config
 	cs := layout.RigidConstraints(e.Size)
 	w.faces.Reset(cfg)
@@ -225,7 +225,7 @@ func (w *Window) Layout(e app.DrawEvent, ops *ui.Ops) {
 	pointer.RectAreaOp{Rect: r}.Add(ops)
 	w.scrollXY.Add(ops)
 
-	draw.ColorOp{
+	paint.ColorOp{
 		Color: color.RGBA{A: 0x80, R: 0xff, B: 0xff, G: 0xff},
 	}.Add(ops)
 	lbl := text.Label{
@@ -251,9 +251,9 @@ func (w *Window) Layout(e app.DrawEvent, ops *ui.Ops) {
 		X: float32(xOffset + w.scrollX),
 		Y: float32(yOffset + w.scrollY),
 	}).Add(ops)
-	draw.ColorOp{Color: color.RGBA{A: 0xff, G: 0xff}}.Add(ops)
+	paint.ColorOp{Color: color.RGBA{A: 0xff, G: 0xff}}.Add(ops)
 	for pos := range w.u.cells {
-		draw.DrawOp{
+		paint.PaintOp{
 			Rect: f32.Rectangle{
 				Min: f32.Point{float32(w.scale * pos.x), float32(w.scale * pos.y)},
 				Max: f32.Point{float32(w.scale * (pos.x + 1)), float32(w.scale * (pos.y + 1))},
@@ -274,7 +274,7 @@ func (u *Universe) Random(x, y, density int) {
 }
 
 func (w *Window) label(ops *ui.Ops, cs layout.Constraints, txt string) (pressed bool) {
-	draw.ColorOp{
+	paint.ColorOp{
 		Color: color.RGBA{A: 0x80, R: 0xff, B: 0xff, G: 0xff},
 	}.Add(ops)
 	lbl := text.Label{
