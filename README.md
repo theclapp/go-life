@@ -9,11 +9,12 @@ For the desktop app, Go 1.12 is fine.
 
 To build the web version (which you don't have to do if you only want to run it), you'll need 1.13 / go tip.  (Explaining "go tip" is beyond the scope of this readme, sorry.)
 
-Aagin: the www/ directory in the repo is ready to run, no need to (re)build it.  **So if you just want to try it**, you don't need "go tip".
+Again: the www/ directory in the repo is ready to run, no need to (re)build it.  **So if you just want to try it**, you don't need "go tip".
 
 ### Desktop
 
 ```bash
+% export GO111MODULE=on
 % go run life.go
 ```
 
