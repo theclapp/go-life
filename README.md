@@ -38,7 +38,8 @@ May take a few moments to download on your first visit; ~4 mb download.
 
 These work in the desktop app and in the browser.
 
-* q to quit (in the browser this just halts execution)
+* `q` to quit (in the browser this just halts execution)
+* `r` to restart the universe with random cells
 * `-` (minus key) to reduce the scale (zoom out)
 * `+` to increase the scale (zoom in) (`=` also works)
 * `<` or `,` to slow down the generations
