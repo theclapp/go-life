@@ -1,6 +1,6 @@
 # go-life
 
-Conway's Game of Life in Go, cross-platform
+Conway's Game of Life in Go, cross-platform  
 Uses [Gio](https://git.sr.ht/~eliasnaur/gio) by [@EliasNaur](https://github.com/eliasnaur).
 
 ## To build
