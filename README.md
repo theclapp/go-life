@@ -20,12 +20,19 @@ Again: the www/ directory in the repo is ready to run, no need to (re)build it. 
 
 ### Browser:
 
+#### Locally
+
 ```bash
 % go get github.com/shurcooL/goexec
 % goexec 'http.ListenAndServe(":8080", http.FileServer(http.Dir("www")))'
 ```
 
 Browse to http://localhost:8080.
+
+#### From Github
+
+Browse to http://theclapp.github.io/go-life/www/.  
+May take a few moments to download on your first visit; ~4 mb download.
 
 ## Hotkeys
 
