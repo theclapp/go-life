@@ -23,6 +23,10 @@ import (
 	"golang.org/x/image/font/sfnt"
 )
 
+const (
+	fontHeight = 14
+)
+
 type (
 	Pos struct {
 		x, y int
@@ -44,9 +48,8 @@ type (
 		scrollX, scrollY int
 		paused           bool
 
-		interval               time.Duration
-		genTimer               *time.Ticker
-		zi, zo, faster, slower label
+		interval time.Duration
+		genTimer *time.Ticker
 
 		buttons map[string]*ggesture.Click
 	}
@@ -86,13 +89,9 @@ func main() {
 					case "q":
 						os.Exit(0)
 					case "p":
-						w.paused = true
-						w.genTimer.Stop()
-						w.w.Invalidate()
+						w.pause()
 					case "c":
-						w.paused = false
-						w.genTimer = time.NewTicker(w.interval)
-						w.w.Invalidate()
+						w.cont()
 					// Restart with another random universe
 					case "r":
 						w.u.Random(100, 100, 333)
@@ -239,33 +238,39 @@ func (w *Window) Layout(e app.UpdateEvent, ops *ui.Ops) {
 	var stack ui.StackOp
 	stack.Push(ops)
 
-	// Draw the caption
+	// Draw the top buttons
 	paint.ColorOp{
 		Color: color.RGBA{A: 0x80, R: 0xff, B: 0xff, G: 0xff},
 	}.Add(ops)
-	lbl := text.Label{
-		Face: w.faces.For(w.regular, ui.Sp(13)),
-		Text: fmt.Sprintf("Gen: %d", w.u.gen),
-	}
-	if w.paused {
-		lbl.Text += ", paused"
-	}
-	lbl.Text += fmt.Sprintf(" Scale: %d ", w.scale)
-	dims := lbl.Layout(ops, cs)
-	ui.TransformOp{}.Offset(f32.Point{X: float32(dims.Size.X)}).Add(ops)
 
 	// Layout buttons and process clicks
 	{
-		curry := func(s string, action func()) { w.button(ops, cs, s, action) }
-		curry("Zoom in ", w.zoomIn)
-		curry("Zoom out ", w.zoomOut)
-		curry("Go slower ", w.goSlower)
-		curry("Go faster", w.goFaster)
+		partial := func(s string, action func()) { w.button(ops, cs, s, action) }
+		if w.paused {
+			partial("Continue |", w.cont)
+		} else {
+			partial("Pause |", w.pause)
+		}
+		partial(" Zoom in |", w.zoomIn)
+		partial(" Zoom out |", w.zoomOut)
+		partial(" Go slower |", w.goSlower)
+		partial(" Go faster |", w.goFaster)
 	}
+
+	lbl := text.Label{
+		Face: w.faces.For(w.regular, ui.Sp(fontHeight)),
+		Text: fmt.Sprintf(" Gen: %d | ", w.u.gen),
+	}
+	lbl.Text += fmt.Sprintf("Scale: %d", w.scale)
+	if w.paused {
+		lbl.Text += " | PAUSED"
+	}
+	dims := lbl.Layout(ops, cs)
+	ui.TransformOp{}.Offset(f32.Point{X: float32(dims.Size.X)}).Add(ops)
 
 	stack.Pop()
 
-	// Clip cells below the caption
+	// Clip cells so they don't obscure the caption
 	paint.RectClip(image.Rectangle{
 		Min: image.Point{Y: dims.Size.Y},
 		Max: e.Size,
@@ -322,6 +327,18 @@ func (w *Window) goSlower() {
 	w.genTimer = time.NewTicker(w.interval)
 }
 
+func (w *Window) pause() {
+	w.paused = true
+	w.genTimer.Stop()
+	w.w.Invalidate()
+}
+
+func (w *Window) cont() {
+	w.paused = false
+	w.genTimer = time.NewTicker(w.interval)
+	w.w.Invalidate()
+}
+
 type label struct {
 	w     *Window
 	click ggesture.Click
@@ -335,7 +352,7 @@ func (w *Window) button(ops *ui.Ops, cs layout.Constraints, label string, action
 	}
 
 	lbl := text.Label{
-		Face: w.faces.For(w.regular, ui.Sp(13)),
+		Face: w.faces.For(w.regular, ui.Sp(fontHeight)),
 		Text: label,
 	}
 	dims := lbl.Layout(ops, cs)
