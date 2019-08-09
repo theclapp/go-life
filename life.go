@@ -11,6 +11,7 @@ import (
 	"gioui.org/ui"
 	"gioui.org/ui/app"
 	"gioui.org/ui/f32"
+	ggesture "gioui.org/ui/gesture"
 	"gioui.org/ui/key"
 	"gioui.org/ui/layout"
 	"gioui.org/ui/measure"
@@ -41,6 +42,11 @@ type (
 
 		scrollXY         gesture.ScrollXY
 		scrollX, scrollY int
+		paused           bool
+
+		interval               time.Duration
+		genTimer               *time.Ticker
+		zi, zo, faster, slower label
 	}
 )
 
@@ -61,11 +67,11 @@ func main() {
 
 		ops := &ui.Ops{}
 
-		interval := 100 * time.Millisecond
-		genTimer := time.NewTicker(interval)
+		w.interval = 100 * time.Millisecond
+		w.genTimer = time.NewTicker(w.interval)
 		for {
 			select {
-			case <-genTimer.C:
+			case <-w.genTimer.C:
 				w.u = w.u.NextGen()
 				w.w.Invalidate()
 			case e := <-w.w.Events():
@@ -75,35 +81,25 @@ func main() {
 					case "q":
 						os.Exit(0)
 					case "p":
-						genTimer.Stop()
+						w.paused = true
+						w.genTimer.Stop()
 						w.w.Invalidate()
 					case "c":
-						genTimer = time.NewTicker(interval)
+						w.paused = false
+						w.genTimer = time.NewTicker(w.interval)
 						w.w.Invalidate()
 					// Restart with another random universe
 					case "r":
 						w.u.Random(100, 100, 333)
 						w.w.Invalidate()
-					// Zoom out
 					case "-":
-						if w.scale > 1 {
-							w.scale--
-						}
-						w.w.Invalidate()
-					// Zoom in
+						w.zoomOut()
 					case "+", "=":
-						w.scale++
-						w.w.Invalidate()
-					// faster
+						w.zoomIn()
 					case ">", ".":
-						genTimer.Stop()
-						interval /= 2
-						genTimer = time.NewTicker(interval)
-					// slower
+						w.goFaster()
 					case "<", ",":
-						genTimer.Stop()
-						interval *= 2
-						genTimer = time.NewTicker(interval)
+						w.goSlower()
 					default:
 						// fmt.Printf("key name: %s\n", e.Text)
 					}
@@ -218,9 +214,13 @@ func max(n1, n2 int) int {
 
 func (w *Window) Layout(e app.UpdateEvent, ops *ui.Ops) {
 	cfg := &e.Config
-	cs := layout.RigidConstraints(e.Size)
 	w.faces.Reset(cfg)
+	cs := layout.Constraints{
+		Width:  layout.Constraint{Max: e.Size.X},
+		Height: layout.Constraint{Max: e.Size.Y},
+	}
 
+	// Do scrolling
 	scrollX, scrollY := w.scrollXY.ScrollXY(cfg, w.w.Queue())
 	if scrollX != 0 || scrollY != 0 {
 		// fmt.Printf("window layout: scrollX: %d, scrollY: %d\n", scrollX, scrollY)
@@ -231,6 +231,24 @@ func (w *Window) Layout(e app.UpdateEvent, ops *ui.Ops) {
 	pointer.RectAreaOp{Rect: r}.Add(ops)
 	w.scrollXY.Add(ops)
 
+	// Do clicking
+	for range w.zi.clicked(w.w.Queue()) {
+		w.zoomIn()
+	}
+	for range w.zo.clicked(w.w.Queue()) {
+		w.zoomOut()
+	}
+	for range w.faster.clicked(w.w.Queue()) {
+		w.goFaster()
+	}
+	for range w.slower.clicked(w.w.Queue()) {
+		w.goSlower()
+	}
+
+	var stack ui.StackOp
+	stack.Push(ops)
+
+	// Draw the caption
 	paint.ColorOp{
 		Color: color.RGBA{A: 0x80, R: 0xff, B: 0xff, G: 0xff},
 	}.Add(ops)
@@ -238,13 +256,23 @@ func (w *Window) Layout(e app.UpdateEvent, ops *ui.Ops) {
 		Face: w.faces.For(w.regular, ui.Sp(13)),
 		Text: fmt.Sprintf("Gen: %d", w.u.gen),
 	}
+	if w.paused {
+		lbl.Text += ", paused"
+	}
+	lbl.Text += fmt.Sprintf(" Scale: %d ", w.scale)
 	dims := lbl.Layout(ops, cs)
+	ui.TransformOp{}.Offset(f32.Point{X: float32(dims.Size.X)}).Add(ops)
 
-	// Clip cells below the caption, painted above.
-	// (You'd think it'd be dims.Size.Y, not dims.Baseline, but dims.Size.Y
-	// seems to be the size of the whole window or something.)
+	w.zi.clickableLabel(w, ops, cs, "Zoom in ")
+	w.zo.clickableLabel(w, ops, cs, "Zoom out ")
+	w.slower.clickableLabel(w, ops, cs, "Slow down ")
+	w.faster.clickableLabel(w, ops, cs, "Speed up ")
+
+	stack.Pop()
+
+	// Clip cells below the caption
 	paint.RectClip(image.Rectangle{
-		Min: image.Point{Y: 3 * dims.Baseline / 2},
+		Min: image.Point{Y: dims.Size.Y},
 		Max: e.Size,
 	}).Add(ops)
 	ui.TransformOp{}.Offset(f32.Point{
@@ -274,14 +302,58 @@ func (u *Universe) Random(x, y, density int) {
 	}
 }
 
-func (w *Window) label(ops *ui.Ops, cs layout.Constraints, txt string) (pressed bool) {
-	paint.ColorOp{
-		Color: color.RGBA{A: 0x80, R: 0xff, B: 0xff, G: 0xff},
-	}.Add(ops)
+func (w *Window) zoomIn() {
+	w.scale++
+	w.w.Invalidate()
+}
+
+func (w *Window) zoomOut() {
+	if w.scale > 1 {
+		w.scale--
+	}
+	w.w.Invalidate()
+}
+
+func (w *Window) goFaster() {
+	w.genTimer.Stop()
+	w.interval /= 2
+	w.genTimer = time.NewTicker(w.interval)
+	w.w.Invalidate()
+}
+
+func (w *Window) goSlower() {
+	w.genTimer.Stop()
+	w.interval *= 2
+	w.genTimer = time.NewTicker(w.interval)
+}
+
+type label struct {
+	w     *Window
+	click ggesture.Click
+}
+
+func (l *label) clickableLabel(w *Window, ops *ui.Ops, cs layout.Constraints, txt string) {
 	lbl := text.Label{
 		Face: w.faces.For(w.regular, ui.Sp(13)),
 		Text: txt,
 	}
-	lbl.Layout(ops, cs)
-	return false
+	dims := lbl.Layout(ops, cs)
+	var stack ui.StackOp
+	stack.Push(ops)
+	pointer.RectAreaOp{
+		Rect: image.Rectangle{Max: image.Point{X: dims.Size.X, Y: dims.Size.Y}},
+	}.Add(ops)
+	l.click.Add(ops)
+	stack.Pop()
+	ui.TransformOp{}.Offset(f32.Point{X: float32(dims.Size.X)}).Add(ops)
+}
+
+func (l *label) clicked(q *app.Queue) []ggesture.ClickEvent {
+	var es []ggesture.ClickEvent
+	for _, e := range l.click.Events(q) {
+		if e.Type == ggesture.TypeClick {
+			es = append(es, e)
+		}
+	}
+	return es
 }
