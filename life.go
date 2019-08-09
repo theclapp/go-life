@@ -47,12 +47,17 @@ type (
 		interval               time.Duration
 		genTimer               *time.Ticker
 		zi, zo, faster, slower label
+
+		buttons map[string]*ggesture.Click
 	}
 )
 
 func main() {
 	go func() {
-		w := &Window{scale: 10}
+		w := &Window{
+			scale:   10,
+			buttons: map[string]*ggesture.Click{},
+		}
 		w.u = NewUniverse()
 		// w.u.RPentomino()
 		w.u.Random(100, 100, 333)
@@ -231,20 +236,6 @@ func (w *Window) Layout(e app.UpdateEvent, ops *ui.Ops) {
 	pointer.RectAreaOp{Rect: r}.Add(ops)
 	w.scrollXY.Add(ops)
 
-	// Do clicking
-	for range w.zi.clicked(w.w.Queue()) {
-		w.zoomIn()
-	}
-	for range w.zo.clicked(w.w.Queue()) {
-		w.zoomOut()
-	}
-	for range w.faster.clicked(w.w.Queue()) {
-		w.goFaster()
-	}
-	for range w.slower.clicked(w.w.Queue()) {
-		w.goSlower()
-	}
-
 	var stack ui.StackOp
 	stack.Push(ops)
 
@@ -263,10 +254,14 @@ func (w *Window) Layout(e app.UpdateEvent, ops *ui.Ops) {
 	dims := lbl.Layout(ops, cs)
 	ui.TransformOp{}.Offset(f32.Point{X: float32(dims.Size.X)}).Add(ops)
 
-	w.zi.clickableLabel(w, ops, cs, "Zoom in ")
-	w.zo.clickableLabel(w, ops, cs, "Zoom out ")
-	w.slower.clickableLabel(w, ops, cs, "Slow down ")
-	w.faster.clickableLabel(w, ops, cs, "Speed up ")
+	// Layout buttons and process clicks
+	{
+		curry := func(s string, action func()) { w.button(ops, cs, s, action) }
+		curry("Zoom in ", w.zoomIn)
+		curry("Zoom out ", w.zoomOut)
+		curry("Go slower ", w.goSlower)
+		curry("Go faster", w.goFaster)
+	}
 
 	stack.Pop()
 
@@ -332,28 +327,34 @@ type label struct {
 	click ggesture.Click
 }
 
-func (l *label) clickableLabel(w *Window, ops *ui.Ops, cs layout.Constraints, txt string) {
+func (w *Window) button(ops *ui.Ops, cs layout.Constraints, label string, action func()) {
+	click, ok := w.buttons[label]
+	if !ok {
+		click = &ggesture.Click{}
+		w.buttons[label] = click
+	}
+
 	lbl := text.Label{
 		Face: w.faces.For(w.regular, ui.Sp(13)),
-		Text: txt,
+		Text: label,
 	}
 	dims := lbl.Layout(ops, cs)
+
 	var stack ui.StackOp
 	stack.Push(ops)
+
 	pointer.RectAreaOp{
 		Rect: image.Rectangle{Max: image.Point{X: dims.Size.X, Y: dims.Size.Y}},
 	}.Add(ops)
-	l.click.Add(ops)
-	stack.Pop()
-	ui.TransformOp{}.Offset(f32.Point{X: float32(dims.Size.X)}).Add(ops)
-}
+	click.Add(ops)
 
-func (l *label) clicked(q *app.Queue) []ggesture.ClickEvent {
-	var es []ggesture.ClickEvent
-	for _, e := range l.click.Events(q) {
+	stack.Pop()
+
+	ui.TransformOp{}.Offset(f32.Point{X: float32(dims.Size.X)}).Add(ops)
+
+	for _, e := range click.Events(w.w.Queue()) {
 		if e.Type == ggesture.TypeClick {
-			es = append(es, e)
+			action()
 		}
 	}
-	return es
 }
