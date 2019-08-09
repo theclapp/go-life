@@ -32,7 +32,9 @@ Browse to http://localhost:8080.
 #### From Github
 
 Browse to http://theclapp.github.io/go-life/www/.  
-May take a few moments to download on your first visit; ~4 mb download.
+May take a few moments to download on your first visit; ~4 mb download (~1 mb on the wire).
+
+(May not work in Chrome (see [#1](https://github.com/theclapp/go-life/issues/1)) though it does for me.  If not, try a different browser.)
 
 ## Hotkeys
 
