@@ -259,9 +259,8 @@ func (w *Window) Layout(e app.UpdateEvent, ops *ui.Ops) {
 
 	lbl := text.Label{
 		Face: w.faces.For(w.regular, ui.Sp(fontHeight)),
-		Text: fmt.Sprintf(" Gen: %d | ", w.u.gen),
+		Text: fmt.Sprintf(" Gen: %d | Scale: %d | GenTime: %v", w.u.gen, w.scale, w.interval),
 	}
-	lbl.Text += fmt.Sprintf("Scale: %d", w.scale)
 	if w.paused {
 		lbl.Text += " | PAUSED"
 	}
@@ -325,6 +324,7 @@ func (w *Window) goSlower() {
 	w.genTimer.Stop()
 	w.interval *= 2
 	w.genTimer = time.NewTicker(w.interval)
+	w.w.Invalidate()
 }
 
 func (w *Window) pause() {
