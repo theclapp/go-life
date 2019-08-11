@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log"
 	"math/rand"
 	"os"
 	"time"
@@ -84,6 +85,11 @@ func main() {
 				w.w.Invalidate()
 			case e := <-w.w.Events():
 				switch e := e.(type) {
+				case app.DestroyEvent:
+					if err := e.Err; err != nil {
+						log.Fatal(err)
+					}
+					return
 				case key.EditEvent:
 					switch e.Text {
 					case "q":
